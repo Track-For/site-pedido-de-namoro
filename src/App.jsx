@@ -180,7 +180,7 @@ function App() {
         { transform: `translate(${deltaX * 0.48}px, ${deltaY * 0.48 - lift}px) rotate(6deg)`, offset: 0.52 },
         { transform: 'translate(0, 0) rotate(0deg)', offset: 1 },
       ],
-      { duration: reduceMotion ? 240 : 760, easing: 'cubic-bezier(0.22, 0.8, 0.2, 1)' },
+      { duration: reduceMotion ? 240 : 420, easing: 'cubic-bezier(0.22, 0.8, 0.2, 1)' },
     )
 
     let disposed = false
