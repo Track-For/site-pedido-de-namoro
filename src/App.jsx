@@ -3,6 +3,12 @@ import memeImage from '../images/Pedido de Namoro.jpg'
 
 const FIREWORK_COLORS = ['#ff578b', '#ffd267', '#fff4e8', '#fb8db0', '#ff9d72']
 
+function distanceToRect(x, y, rect) {
+  const closestX = Math.max(rect.left, Math.min(x, rect.right))
+  const closestY = Math.max(rect.top, Math.min(y, rect.bottom))
+  return Math.hypot(x - closestX, y - closestY)
+}
+
 function Fireworks({ replay }) {
   const canvasRef = useRef(null)
 
@@ -109,10 +115,11 @@ function App() {
   const lastDodgeRef = useRef(0)
   const flightStartRef = useRef(null)
   const isFlyingRef = useRef(false)
+  const pointerRef = useRef(null)
 
   const dodge = useCallback((pointerX, pointerY) => {
     const button = noButtonRef.current
-    if (!button || isFlyingRef.current || Date.now() - lastDodgeRef.current < 90) return
+    if (!button || Date.now() - lastDodgeRef.current < 90) return
 
     const rect = button.getBoundingClientRect()
     const width = rect.width || 132
@@ -120,15 +127,16 @@ function App() {
     const margin = 18
     const maxX = Math.max(margin, window.innerWidth - width - margin)
     const maxY = Math.max(margin, window.innerHeight - height - margin)
+    const safeDistance = Math.min(260, Math.max(170, Math.min(window.innerWidth, window.innerHeight) * 0.35))
     const yesRect = yesButtonRef.current?.getBoundingClientRect()
     let next = null
 
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const x = margin + Math.random() * (maxX - margin)
       const y = margin + Math.random() * (maxY - margin)
-      const centerX = x + width / 2
-      const centerY = y + height / 2
-      const farFromPointer = Math.hypot(centerX - pointerX, centerY - pointerY) > 145
+      const farFromPointer = distanceToRect(pointerX, pointerY, {
+        left: x, top: y, right: x + width, bottom: y + height,
+      }) > safeDistance
       const farFromOldPlace = Math.hypot(x - rect.left, y - rect.top) > 120
       const clearOfYes = !yesRect || x > yesRect.right + 18 || x + width < yesRect.left - 18 || y > yesRect.bottom + 18 || y + height < yesRect.top - 18
 
@@ -176,30 +184,50 @@ function App() {
     )
 
     let disposed = false
+    let watchFrame = 0
+    const startedAt = performance.now()
+    const watchFlight = (now) => {
+      if (disposed) return
+      const pointer = pointerRef.current
+      if (pointer && now - startedAt > 110 && distanceToRect(pointer.x, pointer.y, button.getBoundingClientRect()) < 170) {
+        dodge(pointer.x, pointer.y)
+        return
+      }
+      watchFrame = window.requestAnimationFrame(watchFlight)
+    }
+    watchFrame = window.requestAnimationFrame(watchFlight)
+
     const finish = () => {
       if (disposed) return
-      button.style.pointerEvents = ''
+      window.cancelAnimationFrame(watchFrame)
       isFlyingRef.current = false
+      const pointer = pointerRef.current
+      if (pointer && distanceToRect(pointer.x, pointer.y, button.getBoundingClientRect()) < 200) {
+        dodge(pointer.x, pointer.y)
+      } else {
+        button.style.pointerEvents = ''
+      }
     }
     animation.onfinish = finish
     animation.oncancel = finish
 
     return () => {
       disposed = true
+      window.cancelAnimationFrame(watchFrame)
       animation.cancel()
     }
-  }, [noPosition])
+  }, [noPosition, dodge])
 
   useEffect(() => {
     if (accepted) return undefined
 
     function watchPointer(event) {
       if (event.pointerType === 'touch') return
+      pointerRef.current = { x: event.clientX, y: event.clientY }
+      if (isFlyingRef.current) return
       const rect = noButtonRef.current?.getBoundingClientRect()
       if (!rect) return
-      const closestX = Math.max(rect.left, Math.min(event.clientX, rect.right))
-      const closestY = Math.max(rect.top, Math.min(event.clientY, rect.bottom))
-      if (Math.hypot(event.clientX - closestX, event.clientY - closestY) < 90) {
+      if (distanceToRect(event.clientX, event.clientY, rect) < 200) {
         dodge(event.clientX, event.clientY)
       }
     }
